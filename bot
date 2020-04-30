@@ -397,7 +397,7 @@ class Strategy
         //  Any invalid moves will get set to null.
         $available_moves = [];
         foreach ($commands as $command) {
-            $available_moves[$direction] = Map::get(Map::translate($command, Map::current('x'), Map::current('y')));
+            $available_moves[$command] = Map::get(Map::translate($command, Map::current('x'), Map::current('y')));
         }
         //  Remove invalid directions -- edges of map and any adjacent tiles
         //  containing another bot (and, for now, the "idle" command too).
