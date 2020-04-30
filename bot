@@ -380,7 +380,7 @@ class Strategy
     public static function aggressive ($available_moves)
     {
         $scores = Strategy::evaluate_moves($available_moves);
-        return ['move' => array_keys($scores)[0], 'logmsg' => "aggressive; $direction; @" . Map::current('x') . "," . Map::current('y')];
+        return ['move' => array_keys($scores)[0], 'logmsg' => "aggressive; " . array_keys($scores)[0] . "; @" . Map::current('x') . "," . Map::current('y')];
     }
 
 
