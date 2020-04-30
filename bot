@@ -1,0 +1,324 @@
+#!/usr/bin/php
+<?php
+
+//  https://github.com/programical/gitland
+
+include __DIR__ . '/config';
+
+//  Valid available moves.
+$moves = ['up' => true, 'down' => true, 'left' => true, 'right' => true];
+$last_move = last_move();
+
+
+class Map
+{
+
+    private static $_map = [];
+
+    /**
+     * Load the game map.
+     *
+     * @param   string      $map_file
+     *
+     * @return  void
+     */
+    public static function load ($map_path)
+    {
+        $map_file = @fopen($map_path, 'r');
+        if ( is_resource($map_file) ) {
+            while ( ! empty($line = trim(fgets($map_file))) ) {
+                static::$_map[] = array_map('trim', explode(',', $line));
+            }
+            fclose($map_file);
+        }
+    }
+
+
+    /**
+     * Return the map value stored at a given position or null if that position
+     * is not valid.
+     *
+     * @param   int         $x
+     * @param   int         $y
+     *
+     * @return  string
+     */
+    public static function get ($x, $y)
+    {
+        if ( is_null($x) || is_null($y) || $y < 0 || $y >= count(static::$_map) || $x < 0 || $x >= count(static::$_map[$y]) ) {
+            return null;
+        }
+        return static::$_map[$y][$x];
+    }
+
+
+    /**
+     * Return the opposite of a given direction.
+     *
+     * @param   string      $direction
+     * 
+     * @return  string
+     */
+    public static function opposite ($direction)
+    {
+        switch ($direction) {
+            case 'left':
+                return 'right';
+            case 'right':
+                return 'left';
+            case 'up':
+                return 'down';
+            case 'down':
+                return 'up';
+        }
+        echo "Invalid direction: $direction\n";
+        stop();
+    }
+
+}
+
+
+/**
+ * Write a null move to the act file and halt.
+ *
+ * @return  void
+ */
+function stop ()
+{
+    file_put_contents(config::CLIENT_BASE_DIR . '/act', 'idle');
+    die();
+}
+
+
+/**
+ * Return the last move stored in the current 'act' file.
+ *
+ * @return  string
+ */
+function last_move ()
+{
+    return trim(file_get_contents(config::CLIENT_BASE_DIR . '/act'));
+}
+
+
+/**
+ * Calculate a value for moving to a specific position on the map.
+ * A weighting factor can be provided to adjust scores by distance
+ * from the current position.
+ * Enemy colors return higher scores, while own color and other players
+ * return lower scores.
+ *
+ * @param   int         $x
+ * @param   int         $y
+ * @param   double      $weight
+ *
+ * @return  double
+ */
+function score ($x, $y, $weight = 1)
+{
+    global $current;
+    $location = Map::get($x, $y);
+    if ( is_null($location) ) {
+        return 0;
+    }
+    if ( substr($location, 0, 1) == 'c' ) {
+        //  Strongly avoid other players.
+        return -5 * $weight;
+    }
+    if ( substr($location, 1, 1) != $current['color'] ) {
+        //  Try to stomp on other colors.
+        return 1.5 * $weight;
+    }
+    else {
+        //  Avoid red areas.
+        return -2 * $weight;
+    }
+    return 0;
+}
+
+
+/**
+ * Given a direction and x, y coordinates, return a new pair of x, y coordinates
+ * in that direction.
+ *
+ * @param   string      $direction
+ * @param   int         $x
+ * @param   int         $y
+ * 
+ * @return  array
+ */
+function translate ($direction, $x, $y)
+{
+    switch ($direction) {
+        case 'left':
+            return [--$x, $y];
+        case 'right':
+            return [++$x, $y];
+        case 'up':
+            return [$x, --$y];
+        case 'down':
+            return [$x, ++$y];
+    }
+    return [$x, $y];
+}
+
+
+/**
+ * Given a direction, current x, y coordinates, the current weighting factor,
+ * and the spread distance, return a cumulative score for all squares along
+ * that line.
+ * 
+ * @param   string      $direction
+ * @param   int         $x
+ * @param   int         $y
+ * @param   double      $weight
+ * @param   int         $spread
+ * 
+ * @return  double
+ */
+function area_score ($direction, $x, $y, $weight, $spread)
+{
+    $score = 0;
+    $n = -1 * $spread;
+    switch ($direction) {
+        case 'left':
+        case 'right':
+            //  If going left or right, then spread vertically.
+            while ( $n <= $spread ) {
+                $score += score($x, $y + $n, $weight / 2);
+                $n++;
+            }
+            break;
+        case 'up':
+        case 'down':
+            //  If going up or down, then spread horizontally.
+            while ( $n <= $spread ) {
+                $score += score($x + $n, $y, $weight / 2);
+                $n++;
+            }
+            break;
+    }
+    return $score;
+}
+
+
+/**
+ * Calculate a score for each possible move and return the highest-scoring move.
+ *
+ * @return  string
+ */
+function evaluate_moves ()
+{
+    global $moves, $current, $last_move;
+    $scores = [];
+    foreach ($moves as $direction => $value) {
+        $scores[$direction] = 0;
+        $x = $current['x'];
+        $y = $current['y'];
+        $weight = 16;
+        $score = 0;
+        $spread = 0;
+        $lookahead_iteration = 0;
+        while ( true ) {
+            $lookahead_iteration++;
+            //  Expand the lookahead beam a bit.
+            if ( $lookahead_iteration % 2 != 0 ) {
+                $spread++;
+            }
+            //  Adjust weighting for distance from current position.
+            $weight /= 2;
+            //  Transform coordinates.
+            list($x, $y) = translate($direction, $x, $y);
+            //  Calculate scores in this direction.
+            $score = score($x, $y, $weight);
+            if ( $score === 0 ) {
+                //  score() returns exactly 0 if the coordinates are not valid.
+                break;
+            }
+            //  If this direction is the opposite of the last direction, brutally
+            //  penalize it to prevent oscillations.
+            if ( $direction == Map::opposite($last_move) ) {
+                $score -= $weight;
+            }
+            //  Calculate the final score for this iteration of this direction.
+            $scores[$direction] += ($score + area_score($direction, $x, $y, $weight, $spread));
+        }
+    }
+    arsort($scores);
+    return $scores;
+}
+
+
+//  Try to avoid missing the latest update from the server.
+sleep(10);
+
+//  Get the current game situation.
+echo "Retrieving updates...\n";
+exec('cd ' . config::GAME_BASE_DIR . ' && git pull', $out);
+
+//  Read the current game board.
+Map::load(config::GAME_BASE_DIR . '/map');
+
+//  Read the current position.
+$current = [
+    'x' => trim(file_get_contents(config::GAME_BASE_DIR . '/players/' . config::PLAYER_NAME . '/x')),
+    'y' => trim(file_get_contents(config::GAME_BASE_DIR . '/players/' . config::PLAYER_NAME . '/y')),
+    'color' => substr(trim(file_get_contents(config::GAME_BASE_DIR . '/players/' . config::PLAYER_NAME . '/team')), 1, 1),
+];
+
+if ( strlen($current['x']) == 0 || strlen($current['y']) == 0 ) {
+    echo "ERROR: Invalid position!\n";
+    stop();
+}
+
+echo "Current position: {$current['x']}, {$current['y']}\n";
+echo "Current team: {$current['color']}\n";
+
+//  Retrieve data for available moves from the current map.
+//  Any invalid moves will automatically be set to null.
+$moves['left']  = Map::get($current['x'] - 1, $current['y']);
+$moves['right'] = Map::get($current['x'] + 1, $current['y']);
+$moves['up']    = Map::get($current['x'], $current['y'] - 1);
+$moves['down']  = Map::get($current['x'], $current['y'] + 1);
+
+//  Remove invalid directions -- edges of map and any adjacent squares
+//  containing another bot.
+$moves = array_filter($moves, function($move){
+    if ( is_null($move) || substr($move, 0, 1) == 'c' ) {
+        return false;
+    }
+    return true;
+});
+
+print_r($moves);
+
+$direction = '';
+if ( count($moves) == 1 ) {
+    $direction = array_keys($moves)[0];
+    echo "Moving $direction (only option)\n";
+}
+else if ( count($moves) > 1 ) {
+    $scores = evaluate_moves();
+    var_dump($scores);
+    if ( array_key_exists(last_move(), $scores) && $scores[last_move()] > 0 ) {
+        echo last_move() . " is still good enough\n";
+        $direction = last_move();
+    }
+    else {
+        $direction = array_keys($scores)[0];
+        echo "Changing direction: $direction\n";
+    }
+}
+
+if ( $direction == last_move() ) {
+    echo "Current move is same as last, skipping commit.\n";
+}
+else {
+    //  Write the move.
+    file_put_contents(config::CLIENT_BASE_DIR . '/act', $direction);
+    $out = [];
+    $current_x = $current['x'];
+    $current_y = $current['y'];
+    exec('cd ' . config::CLIENT_BASE_DIR . " && git add act && git commit -m 'Now @ $current_x, $current_y; Move $direction' && git push", $out);
+    print_r($out);
+}
