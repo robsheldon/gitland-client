@@ -401,7 +401,7 @@ class Strategy
         }
         //  Remove invalid directions -- edges of map and any adjacent tiles
         //  containing another bot (and, for now, the "idle" command too).
-        unset($available_moves['idle'];
+        unset($available_moves['idle']);
         $available_moves = array_filter($available_moves, function($move){
             if ( is_null($move) || substr($move, 0, 1) == 'c' ) {
                 return false;
