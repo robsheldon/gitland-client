@@ -50,12 +50,42 @@ class Map
      *
      * @return  string
      */
-    public static function get ($x, $y)
+    public static function get ($x, $y = null)
     {
+        if ( is_array($x) ) {
+            $y = $x[1];
+            $x = $x[0];
+        }
         if ( is_null($x) || is_null($y) || $y < 0 || $y >= count(static::$_map) || $x < 0 || $x >= count(static::$_map[$y]) ) {
             return null;
         }
         return static::$_map[$y][$x];
+    }
+
+
+    /**
+     * Given a direction and x, y coordinates, return a new pair of x, y
+     * coordinates in that direction.
+     *
+     * @param   string      $direction
+     * @param   int         $x
+     * @param   int         $y
+     * 
+     * @return  array
+     */
+    public static function translate ($direction, $x, $y)
+    {
+        switch ($direction) {
+            case 'left':
+                return [--$x, $y];
+            case 'right':
+                return [++$x, $y];
+            case 'up':
+                return [$x, --$y];
+            case 'down':
+                return [$x, ++$y];
+        }
+        return [$x, $y];
     }
 
 
@@ -200,7 +230,7 @@ class Strategy
                 //  Adjust weighting for distance from current position.
                 $weight /= 2;
                 //  Transform coordinates.
-                list($x, $y) = translate($direction, $x, $y);
+                list($x, $y) = Map::translate($direction, $x, $y);
                 //  Calculate scores in this direction.
                 $score = static::score($current, $x, $y, $weight);
                 if ( $score === 0 ) {
@@ -236,32 +266,6 @@ function stop ()
 }
 
 
-/**
- * Given a direction and x, y coordinates, return a new pair of x, y coordinates
- * in that direction.
- *
- * @param   string      $direction
- * @param   int         $x
- * @param   int         $y
- * 
- * @return  array
- */
-function translate ($direction, $x, $y)
-{
-    switch ($direction) {
-        case 'left':
-            return [--$x, $y];
-        case 'right':
-            return [++$x, $y];
-        case 'up':
-            return [$x, --$y];
-        case 'down':
-            return [$x, ++$y];
-    }
-    return [$x, $y];
-}
-
-
 //  Try to avoid missing the latest update from the server.
 sleep(10);
 
@@ -291,10 +295,9 @@ echo "Last move was: ${last_move}\n";
 
 //  Retrieve data for available moves from the current map.
 //  Any invalid moves will automatically be set to null.
-$moves['left']  = Map::get($current['x'] - 1, $current['y']);
-$moves['right'] = Map::get($current['x'] + 1, $current['y']);
-$moves['up']    = Map::get($current['x'], $current['y'] - 1);
-$moves['down']  = Map::get($current['x'], $current['y'] + 1);
+foreach (array_keys($moves) as $direction) {
+    $moves[$direction] = Map::get(Map::translate($direction, $current['x'], $current['y']));
+}
 
 //  Remove invalid directions -- edges of map and any adjacent squares
 //  containing another bot.
