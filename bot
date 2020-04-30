@@ -282,7 +282,7 @@ class Strategy
                 }
                 //  If this direction is the opposite of the last direction, brutally
                 //  penalize it to prevent oscillations.
-                if ( $direction == Map::opposite(Map::last_move()) ) {
+                if ( Map::last_move() != 'idle' && $direction == Map::opposite(Map::last_move()) ) {
                     $score -= $weight;
                 }
                 //  Calculate the final score for this iteration of this direction.
