@@ -21,23 +21,42 @@ class Map
 {
 
     private static $_map = [];
+    private static $_current = [
+        'x'     => 0,
+        'y'     => 0,
+        'color' => '',
+    ];
+    private static $_last_move = '';
+
 
     /**
      * Load the game map.
      *
-     * @param   string      $map_file
+     * @param   string      $game_path
      *
      * @return  void
      */
-    public static function load ($map_path)
+    public static function load ($game_path)
     {
-        $map_file = @fopen($map_path, 'r');
+        $map_file = @fopen($game_path . '/map', 'r');
         if ( is_resource($map_file) ) {
             while ( ! empty($line = trim(fgets($map_file))) ) {
                 static::$_map[] = array_map('trim', explode(',', $line));
             }
             fclose($map_file);
         }
+        //  Read the current position.
+        $player_name = config::PLAYER_NAME;
+        static::$_current = [
+            'x' => trim(file_get_contents("$game_path/players/$player_name/x")),
+            'y' => trim(file_get_contents("$game_path/players/$player_name/y")),
+            'color' => substr(trim(file_get_contents("$game_path/players/$player_name/team")), 1, 1),
+        ];
+        if ( strlen(static::$_current['x']) == 0 || strlen(static::$_current['y']) == 0 ) {
+            echo "ERROR: Invalid position!\n";
+            stop();
+        }
+        static::$_last_move = trim(file_get_contents(config::CLIENT_BASE_DIR . '/act'));
     }
 
 
@@ -112,6 +131,30 @@ class Map
         stop();
     }
 
+
+    /**
+     * Return the bot's current x, y, or color value.
+     *
+     * @param   string      $key
+     * 
+     * @return  mixed
+     */
+    function current ($key)
+    {
+        return static::$_current[$key];
+    }
+
+
+    /**
+     * Return the bot's most recent move.
+     *
+     * @return  string
+     */
+    function last_move ()
+    {
+        return static::$_last_move;
+    }
+
 }
 
 
@@ -144,7 +187,7 @@ class Strategy
      *
      * @return  double
      */
-    public static function score ($current, $x, $y, $weight = 1)
+    public static function score ($x, $y, $weight = 1)
     {
         $location = Map::get($x, $y);
         if ( is_null($location) ) {
@@ -154,7 +197,7 @@ class Strategy
             //  Strongly avoid other players.
             return -5 * $weight;
         }
-        if ( substr($location, 1, 1) != $current['color'] ) {
+        if ( substr($location, 1, 1) != Map::current('color') ) {
             //  Try to stomp on other colors.
             return 1.5 * $weight;
         }
@@ -179,7 +222,7 @@ class Strategy
      * 
      * @return  double
      */
-    public static function area_score ($current, $direction, $x, $y, $weight, $spread)
+    public static function area_score ($direction, $x, $y, $weight, $spread)
     {
         $score = 0;
         $n = -1 * $spread;
@@ -188,7 +231,7 @@ class Strategy
             case 'right':
                 //  If going left or right, then spread vertically.
                 while ( $n <= $spread ) {
-                    $score += static::score($current, $x, $y + $n, $weight / 2);
+                    $score += static::score($x, $y + $n, $weight / 2);
                     $n++;
                 }
                 break;
@@ -196,7 +239,7 @@ class Strategy
             case 'down':
                 //  If going up or down, then spread horizontally.
                 while ( $n <= $spread ) {
-                    $score += static::score($current, $x + $n, $y, $weight / 2);
+                    $score += static::score($x + $n, $y, $weight / 2);
                     $n++;
                 }
                 break;
@@ -210,13 +253,13 @@ class Strategy
      *
      * @return  string
      */
-    public static function evaluate_moves ($moves, $current, $last_move)
+    public static function evaluate_moves ($moves)
     {
         $scores = [];
         foreach ($moves as $direction => $value) {
             $scores[$direction] = 0;
-            $x = $current['x'];
-            $y = $current['y'];
+            $x = Map::current('x');
+            $y = Map::current('y');
             $weight = 16;
             $score = 0;
             $spread = 0;
@@ -232,18 +275,18 @@ class Strategy
                 //  Transform coordinates.
                 list($x, $y) = Map::translate($direction, $x, $y);
                 //  Calculate scores in this direction.
-                $score = static::score($current, $x, $y, $weight);
+                $score = static::score($x, $y, $weight);
                 if ( $score === 0 ) {
                     //  score() returns exactly 0 if the coordinates are not valid.
                     break;
                 }
                 //  If this direction is the opposite of the last direction, brutally
                 //  penalize it to prevent oscillations.
-                if ( $direction == Map::opposite($last_move) ) {
+                if ( $direction == Map::opposite(Map::last_move()) ) {
                     $score -= $weight;
                 }
                 //  Calculate the final score for this iteration of this direction.
-                $scores[$direction] += ($score + static::area_score($current, $direction, $x, $y, $weight, $spread));
+                $scores[$direction] += ($score + static::area_score($direction, $x, $y, $weight, $spread));
             }
         }
         arsort($scores);
@@ -274,29 +317,16 @@ echo "Retrieving updates...\n";
 exec('cd ' . config::GAME_BASE_DIR . ' && git pull', $out);
 
 //  Read the current game board.
-Map::load(config::GAME_BASE_DIR . '/map');
+Map::load(config::GAME_BASE_DIR);
 
-//  Read the current position.
-$current = [
-    'x' => trim(file_get_contents(config::GAME_BASE_DIR . '/players/' . config::PLAYER_NAME . '/x')),
-    'y' => trim(file_get_contents(config::GAME_BASE_DIR . '/players/' . config::PLAYER_NAME . '/y')),
-    'color' => substr(trim(file_get_contents(config::GAME_BASE_DIR . '/players/' . config::PLAYER_NAME . '/team')), 1, 1),
-];
-$last_move = trim(file_get_contents(config::CLIENT_BASE_DIR . '/act'));
-
-if ( strlen($current['x']) == 0 || strlen($current['y']) == 0 ) {
-    echo "ERROR: Invalid position!\n";
-    stop();
-}
-
-echo "Current position: {$current['x']}, {$current['y']}\n";
-echo "Current team: {$current['color']}\n";
-echo "Last move was: ${last_move}\n";
+echo "Current position: " . Map::current('x') . ", " . Map::current('y') . "\n";
+echo "Current team: " . Map::current('color') . "\n";
+echo "Last move was: " . Map::last_move() . "\n";
 
 //  Retrieve data for available moves from the current map.
 //  Any invalid moves will automatically be set to null.
 foreach (array_keys($moves) as $direction) {
-    $moves[$direction] = Map::get(Map::translate($direction, $current['x'], $current['y']));
+    $moves[$direction] = Map::get(Map::translate($direction, Map::current('x'), Map::current('y')));
 }
 
 //  Remove invalid directions -- edges of map and any adjacent squares
@@ -316,11 +346,11 @@ if ( count($moves) == 1 ) {
     echo "Moving $direction (only option)\n";
 }
 else if ( count($moves) > 1 ) {
-    $scores = Strategy::evaluate_moves($moves, $current, $last_move);
+    $scores = Strategy::evaluate_moves($moves);
     var_dump($scores);
-    if ( array_key_exists($last_move, $scores) && $scores[$last_move] > 0 ) {
-        echo "$last_move is still good enough\n";
-        $direction = $last_move;
+    if ( array_key_exists(Map::last_move(), $scores) && $scores[Map::last_move()] > 0 ) {
+        echo Map::last_move() . " is still good enough\n";
+        $direction = Map::last_move();
     }
     else {
         $direction = array_keys($scores)[0];
@@ -328,15 +358,15 @@ else if ( count($moves) > 1 ) {
     }
 }
 
-if ( $direction == $last_move ) {
+if ( $direction == Map::last_move() ) {
     echo "Current move is same as last, skipping commit.\n";
 }
 else {
     //  Write the move.
     file_put_contents(config::CLIENT_BASE_DIR . '/act', $direction);
     $out = [];
-    $current_x = $current['x'];
-    $current_y = $current['y'];
+    $current_x = Map::current('x');
+    $current_y = Map::current('y');
     exec('cd ' . config::CLIENT_BASE_DIR . " && git add act && git commit -m 'Now @ $current_x, $current_y; Move $direction' && git push", $out);
     print_r($out);
 }
