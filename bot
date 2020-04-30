@@ -61,6 +61,17 @@ class Map
 
 
     /**
+     * Return the size of the map in x and y dimensions.
+     *
+     * @return  array
+     */
+    public static function size ()
+    {
+        return ['y' => count(static::$_map[0]), 'x' => count(static::$_map[0][0])];
+    }
+
+
+    /**
      * Return the map value stored at a given position or null if that position
      * is not valid.
      *
@@ -79,6 +90,27 @@ class Map
             return null;
         }
         return static::$_map[$y][$x];
+    }
+
+
+    /**
+     * Return a count of the number of $search occurrences in the map.
+     *
+     * @param   string      $search
+     *
+     * @return  integer
+     */
+    public static function count ($search)
+    {
+        $count = 0;
+        $n = count(static::$_map);
+        for ( $i=0; $i < $n; $i++ ) { 
+            $row = array_count_values(static::$_map[$i]);
+            if ( array_key_exists($search, $row) ) {
+                $count += $row[$search];
+            }
+        }
+        return $count;
     }
 
 
@@ -103,6 +135,8 @@ class Map
                 return [$x, --$y];
             case 'down':
                 return [$x, ++$y];
+            case 'idle':
+                return [$x, $y];
         }
         return [$x, $y];
     }
@@ -293,6 +327,104 @@ class Strategy
         return $scores;
     }
 
+
+    /**
+     * The "stuck" strategy, intended for situations where the bot has very
+     * limited options available.
+     *
+     * @param   array       $available_moves
+     *
+     * @return  array
+     */
+    public static function stuck ($available_moves)
+    {
+        if ( count($available_moves) == 1 ) {
+            $direction = array_keys($available_moves)[0];
+            return ['move' => $direction, 'logmsg' => "stuck; $direction; @" . Map::current('x') . "," . Map::current('y')];
+        }
+        return ['move' => 'idle', 'logmsg' => "stuck; idle; @" . Map::current('x') . "," . Map::current('y')];
+    }
+
+
+    /**
+     * The "cruise" strategy. This uses scorebeam-based move evaluation, but
+     * will keep the bot moving in the same direction as long as that direction
+     * returns a positive score. This is a friendlier movement pattern that
+     * doesn't chew up the board as badly as the aggressive default pattern.
+     *
+     * @param  array        $available_moves
+     *
+     * @return array
+     */
+    public static function cruise ($available_moves)
+    {
+        $scores = Strategy::evaluate_moves($available_moves);
+        var_dump($scores);
+        if ( array_key_exists(Map::last_move(), $scores) && $scores[Map::last_move()] > 0 ) {
+            return ['move' => Map::last_move(), 'logmsg' => "cruise; $direction; @" . Map::current('x') . "," . Map::current('y')];
+        }
+        //  This direction is no longer valid or is negatively scored.
+        return ['move' => array_keys($scores)[0], 'logmsg' => "cruise; $direction; @" . Map::current('x') . "," . Map::current('y')];
+    }
+
+
+    /**
+     * The "aggressive" (default) strategy. This uses scorebeam-based move
+     * evaluation and the bot will aggressively pursue the highest available
+     * score from its current position.
+     *
+     * @param  array        $available_moves
+     *
+     * @return array
+     */
+    public static function aggressive ($available_moves)
+    {
+        $scores = Strategy::evaluate_moves($available_moves);
+        return ['move' => array_keys($scores)[0], 'logmsg' => "aggressive; $direction; @" . Map::current('x') . "," . Map::current('y')];
+    }
+
+
+    /**
+     * Return a direction and a commit message depending on the current game
+     * situation.
+     *
+     * @return  array
+     */
+    public static function find_move ()
+    {
+        $commands = config::VALID_MOVES;
+        //  Retrieve coordinates for available moves from the current map.
+        //  Any invalid moves will get set to null.
+        $available_moves = [];
+        foreach ($commands as $command) {
+            $available_moves[$direction] = Map::get(Map::translate($command, Map::current('x'), Map::current('y')));
+        }
+        //  Remove invalid directions -- edges of map and any adjacent tiles
+        //  containing another bot (and, for now, the "idle" command too).
+        unset($available_moves['idle'];
+        $available_moves = array_filter($available_moves, function($move){
+            if ( is_null($move) || substr($move, 0, 1) == 'c' ) {
+                return false;
+            }
+            return true;
+        });
+        //  For now, let's continue this helpful debugging output. TODO.
+        print_r($available_moves);
+        //  Select a strategy.
+        if ( count($available_moves) < 2 ) {
+            //  Fall back to the "stuck" strategy; escape in any available direction.
+            //  In the future, the bot may try to teleport from this location.
+            return static::stuck($available_moves);
+        }
+        if ( Map::count('ux') > array_product(Map::size()) * .2 ) {
+            //  If more than 20% of the tiles on the map are unclaimed, then
+            //  select a friendlier, less aggressive movement pattern.
+            return static::cruise($available_moves);
+        }
+        //  Default strategy: best available move.
+        return static::aggressive($available_moves);
+    }
+
 }
 
 
@@ -323,50 +455,15 @@ echo "Current position: " . Map::current('x') . ", " . Map::current('y') . "\n";
 echo "Current team: " . Map::current('color') . "\n";
 echo "Last move was: " . Map::last_move() . "\n";
 
-//  Retrieve data for available moves from the current map.
-//  Any invalid moves will automatically be set to null.
-foreach (array_keys($moves) as $direction) {
-    $moves[$direction] = Map::get(Map::translate($direction, Map::current('x'), Map::current('y')));
-}
+$this_turn = Strategy::find_move();
 
-//  Remove invalid directions -- edges of map and any adjacent squares
-//  containing another bot.
-$moves = array_filter($moves, function($move){
-    if ( is_null($move) || substr($move, 0, 1) == 'c' ) {
-        return false;
-    }
-    return true;
-});
-
-print_r($moves);
-
-$direction = '';
-if ( count($moves) == 1 ) {
-    $direction = array_keys($moves)[0];
-    echo "Moving $direction (only option)\n";
-}
-else if ( count($moves) > 1 ) {
-    $scores = Strategy::evaluate_moves($moves);
-    var_dump($scores);
-    if ( array_key_exists(Map::last_move(), $scores) && $scores[Map::last_move()] > 0 ) {
-        echo Map::last_move() . " is still good enough\n";
-        $direction = Map::last_move();
-    }
-    else {
-        $direction = array_keys($scores)[0];
-        echo "Changing direction: $direction\n";
-    }
-}
-
-if ( $direction == Map::last_move() ) {
+if ( $this_turn['move'] == Map::last_move() ) {
     echo "Current move is same as last, skipping commit.\n";
 }
 else {
     //  Write the move.
-    file_put_contents(config::CLIENT_BASE_DIR . '/act', $direction);
+    file_put_contents(config::CLIENT_BASE_DIR . '/act', $this_turn['move']);
     $out = [];
-    $current_x = Map::current('x');
-    $current_y = Map::current('y');
-    exec('cd ' . config::CLIENT_BASE_DIR . " && git add act && git commit -m 'Now @ $current_x, $current_y; Move $direction' && git push", $out);
+    exec('cd ' . config::CLIENT_BASE_DIR . " && git add act && git commit -m '" . $this_turn['logmsg'] . "' && git push", $out);
     print_r($out);
 }
