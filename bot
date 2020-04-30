@@ -215,7 +215,7 @@ function evaluate_moves ()
         $scores[$direction] = 0;
         $x = $current['x'];
         $y = $current['y'];
-        $weight = 16;
+        $weight = 32;
         $score = 0;
         $spread = 0;
         $lookahead_iteration = 0;
@@ -250,11 +250,12 @@ function evaluate_moves ()
 
 
 //  Try to avoid missing the latest update from the server.
-sleep(10);
+sleep(8);
 
 //  Get the current game situation.
 echo "Retrieving updates...\n";
 exec('cd ' . config::GAME_BASE_DIR . ' && git pull', $out);
+exec('cd ' . config::CLIENT_BASE_DIR . ' && git pull', $out);
 
 //  Read the current game board.
 Map::load(config::GAME_BASE_DIR . '/map');
