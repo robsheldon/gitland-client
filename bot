@@ -336,9 +336,9 @@ class Strategy
     {
         if ( count($available_moves) == 1 ) {
             $direction = array_keys($available_moves)[0];
-            return ['move' => $direction, 'logmsg' => "stuck; $direction; XY" . Map::current('x') . "," . Map::current('y')];
+            return ['move' => $direction, 'logmsg' => "stuck; $direction; xy:" . Map::current('x') . "," . Map::current('y')];
         }
-        return ['move' => 'idle', 'logmsg' => "stuck; idle; XY" . Map::current('x') . "," . Map::current('y')];
+        return ['move' => 'idle', 'logmsg' => "stuck; idle; xy:" . Map::current('x') . "," . Map::current('y')];
     }
 
 
@@ -357,10 +357,10 @@ class Strategy
         $scores = Strategy::evaluate_moves($available_moves);
         var_dump($scores);
         if ( array_key_exists(Map::last_move(), $scores) && $scores[Map::last_move()] > 0 ) {
-            return ['move' => Map::last_move(), 'logmsg' => "cruise; " . Map::last_move() . "; XY" . Map::current('x') . "," . Map::current('y')];
+            return ['move' => Map::last_move(), 'logmsg' => "cruise; " . Map::last_move() . "; xy:" . Map::current('x') . "," . Map::current('y')];
         }
         //  This direction is no longer valid or is negatively scored.
-        return ['move' => array_keys($scores)[0], 'logmsg' => "cruise; " . array_keys($scores)[0] . "; XY" . Map::current('x') . "," . Map::current('y')];
+        return ['move' => array_keys($scores)[0], 'logmsg' => "cruise; " . array_keys($scores)[0] . "; xy:" . Map::current('x') . "," . Map::current('y')];
     }
 
 
@@ -376,7 +376,7 @@ class Strategy
     public static function aggressive ($available_moves)
     {
         $scores = Strategy::evaluate_moves($available_moves);
-        return ['move' => array_keys($scores)[0], 'logmsg' => "aggressive; " . array_keys($scores)[0] . "; XY" . Map::current('x') . "," . Map::current('y')];
+        return ['move' => array_keys($scores)[0], 'logmsg' => "aggressive; " . array_keys($scores)[0] . "; xy:" . Map::current('x') . "," . Map::current('y')];
     }
 
 
