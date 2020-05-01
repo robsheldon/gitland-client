@@ -5,10 +5,6 @@
 
 include __DIR__ . '/config';
 
-//  Valid available moves.
-$moves = ['up' => true, 'down' => true, 'left' => true, 'right' => true];
-
-
 /******************************************************************************
 *                                                                             *
 *   Map class.                                                                *
@@ -442,11 +438,12 @@ function stop ()
 
 
 //  Try to avoid missing the latest update from the server.
-sleep(10);
+sleep(8);
 
 //  Get the current game situation.
 echo "Retrieving updates...\n";
 exec('cd ' . config::GAME_BASE_DIR . ' && git pull', $out);
+exec('cd ' . config::CLIENT_BASE_DIR . ' && git pull', $out);
 
 //  Read the current game board.
 Map::load(config::GAME_BASE_DIR);
