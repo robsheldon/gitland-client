@@ -829,10 +829,14 @@ class Strategy
         //  Now that urgent situations are resolved, look at nearby bots and
         //  consider their behavior.
         $bots = Map::get_bots();
+        $my_bot = $bots[Map::current('x') '/' . Map::current('y')];
         foreach ($bots as $location => $bot) {
             if ( $bot->color != $my_color && Map::distance($bot->x, $bot->y, Map::current('x'), Map::current('y')) < 10 && $bot->status() != 'inactive' ) {
                 echo "Nearby active opponent: " . $bot->name . "\n";
-                print_r($bot->get_recent_moves(5));
+                if ( count(array_intersect($my_bot->get_recent_moves(20), $bot->get_recent_moves(20))) > 5 ) {
+                    //  If 5 of our last 20 moves match:
+                    echo "Moves match\n";
+                }
             }
         }
         //  If more than 20% of the tiles on the map are unclaimed, then select
