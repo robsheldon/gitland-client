@@ -443,7 +443,7 @@ class Bot
         }
         $moves = is_null($n) ? $this->_history : array_slice($this->_history, 0, $n);
         $moves = array_map(function($line){
-            if ( preg_match('/moved to (/[0-9]+\/[0-9]+)/', $line, $move) === 1 ) {
+            if ( preg_match('|moved to ([0-9]+/[0-9]+)|', $line, $move) === 1 ) {
                 return $move[0];
             }
             else {
