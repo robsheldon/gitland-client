@@ -79,7 +79,7 @@ class Map
             }
             //  Find the maximum decay value on the map -- used to calculate the
             //  age of individual tiles as a percentage.
-            $max_decay = max(array_map('max', $static::$_decay));
+            $max_decay = max(array_map('max', static::$_decay));
             //  Do one last sweep through the decay values to convert them to
             //  percentages, so this doesn't need to get recalculated.
             //  See notes in get_decay_pct().
