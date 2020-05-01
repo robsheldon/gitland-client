@@ -239,8 +239,8 @@ class Strategy
                     if ( preg_match("/$regex/", $location) === 1 ) {
                         return $score;
                     }
-                    return 0;
                 }
+                return 0;
             }, $map_row);
         }
         return $values;
