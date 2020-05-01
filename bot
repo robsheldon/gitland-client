@@ -28,6 +28,7 @@ class Map
         'color' => '',
     ];
     private static $_last_move  = '';
+    private static $_log        = [];
 
 
     /**
@@ -103,6 +104,7 @@ class Map
                 'position'  => ['x' => $bot_info['x'], 'y' => $bot_info['y']],
             ], $bot_info);
         }
+        //  Retrieve the bot's last move.
         static::$_last_move = trim(file_get_contents(config::CLIENT_BASE_DIR . '/act'));
         //  Load tile decay data, if available.
         if ( @file_exists("$game_path/decay") && is_resource($decay_file = @fopen("$game_path/decay", 'r')) ) {
@@ -130,6 +132,31 @@ class Map
                 }, $row);
             }, static::$_decay);
             static::$_max_decay = $max_decay;
+        }
+        //  Load the last 50 relevant entries of the game log.
+        exec("cd $game_path && git log -p -n 50 log", $log_lines);
+        $relevant_lines = array_filter(preg_grep('/^(Date:|[+ ][^+ ]+)/', $log_lines), function($line){
+            return preg_match('/tile .* was lost due to decay/', $line) !== 1 && preg_match("/didn't join - invalid team name/", $line) !== 1;
+        });
+        $log_timestamp = '';
+        foreach ($relevant_lines as $line) {
+            if ( $line[0] == '+' ) {
+                $line[0] = ' ';
+            }
+            if ( $line[0] == ' ' ) {
+                if ( $log_timestamp != '' ) {
+                    static::$_log[$log_timestamp][] = trim($line);
+                }
+            }
+            else if ( strpos($line, 'Date:') === 0 ) {
+                $log_timestamp = trim(str_replace('Date:', '', $line));
+                if ( @strtotime($log_timestamp) !== false ) {
+                    static::$_log[$log_timestamp] = [];
+                }
+                else {
+                    $log_timestamp = '';
+                }
+            }
         }
     }
 
