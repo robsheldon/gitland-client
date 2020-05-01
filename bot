@@ -263,7 +263,7 @@ class Map
         foreach (static::$_log as $timestamp => $lines) {
             $matches = preg_grep("/^$bot_name /", $lines);
             if ( count($matches) > 0 ) {
-                $entries[] = $matches[0];
+                $entries[] = array_shift($matches);
             }
             else {
                 $entries[] = '';
