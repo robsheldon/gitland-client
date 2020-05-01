@@ -229,13 +229,7 @@ class Strategy
         if ( is_null($location) ) {
             return 0;
         }
-        $my_color = Map::current('color');
-        $functions = [
-            '^c.$' => config::SCORE_OTHER_BOTS,
-            "^.$my_color\$" => config::SCORE_OWN_COLOR,
-            '^.*$' => config::SCORE_OTHER_COLOR,
-        ];
-        foreach ($functions as $regex => $score) {
+        foreach (static::$_value_functions as $regex => $score) {
             if ( preg_match("/$regex/", $location) === 1 ) {
                 return $score * $weight;
             }
@@ -393,6 +387,16 @@ class Strategy
      */
     public static function find_move ()
     {
+        //  Initialize the default value functions. These apply starting values
+        //  to each position on the board. The starting values are then used
+        //  in calculating the overall value of moving in each direction.
+        $my_color = Map::current('color');
+        static::$_value_functions = [
+            '^c.$' => config::SCORE_OTHER_BOTS,
+            "^.$my_color\$" => config::SCORE_OWN_COLOR,
+            '^.*$' => config::SCORE_OTHER_COLOR,
+        ];
+        //  Load the default available commands.
         $commands = config::VALID_MOVES;
         //  Retrieve coordinates for available moves from the current map.
         //  Any invalid moves will get set to null.
