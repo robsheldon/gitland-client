@@ -98,11 +98,11 @@ class Map
                 echo "ERROR: Can't store data for $bot_name because it's missing required values; skipping.\n";
                 continue;
             }
-            static::$_bots[$bot_info['x'] . '/' . $bot_info['y']] = array_merge([
+            static::$_bots[$bot_info['x'] . '/' . $bot_info['y']] = new Bot(array_merge([
                 'name'  => $bot_name,
                 'color' => substr($bot_info['team'], 1, 1),
                 'position'  => ['x' => $bot_info['x'], 'y' => $bot_info['y']],
-            ], $bot_info);
+            ], $bot_info));
         }
         //  Retrieve the bot's last move.
         static::$_last_move = trim(file_get_contents(config::CLIENT_BASE_DIR . '/act'));
@@ -353,6 +353,51 @@ class Map
         return static::$_last_move;
     }
 
+}
+
+
+
+/******************************************************************************
+*                                                                             *
+*   Bot class.                                                                *
+*                                                                             *
+*   Stores bot-related info (mostly other players) and provides functions     *
+*   for analyzing their behavior in useful ways.                              *
+*                                                                             *
+******************************************************************************/
+
+class Bot
+{
+
+    private $_data    = [];
+    private $_history = [];
+
+    /**
+     * Return a new Bot object from a key-value array of data.
+     *
+     * @param  array        $data
+     */
+    public function __construct ($data)
+    {
+        $this->_data = $data;
+    }
+
+
+    /**
+     * Return a value stored in the bot's data.
+     *
+     * @param   string      $key
+     *
+     * @return  mixed
+     */
+    public function __get ($key)
+    {
+        if ( array_key_exists($key, $this->_data) ) {
+            return $this->_data[$key];
+        }
+        //  TODO: It's time for proper exception handling.
+        return null;
+    }
 }
 
 
