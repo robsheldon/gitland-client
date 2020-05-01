@@ -16,13 +16,17 @@ include __DIR__ . '/config';
 class Map
 {
 
-    private static $_map = [];
-    private static $_current = [
+    private static $_map        = [];
+    private static $_map_height = 0;
+    private static $_map_width  = 0;
+    private static $_decay      = [];
+    private static $_max_decay  = 1;
+    private static $_current    = [
         'x'     => 0,
         'y'     => 0,
         'color' => '',
     ];
-    private static $_last_move = '';
+    private static $_last_move  = '';
 
 
     /**
@@ -34,13 +38,19 @@ class Map
      */
     public static function load ($game_path)
     {
-        $map_file = @fopen($game_path . '/map', 'r');
-        if ( is_resource($map_file) ) {
+        if ( @file_exists("$game_path/map") && is_resource($map_file = @fopen("$game_path/map", 'r')) ) {
             while ( ! empty($line = trim(fgets($map_file))) ) {
                 static::$_map[] = array_map('trim', explode(',', $line));
             }
             fclose($map_file);
         }
+        if ( empty(static::$_map) ) {
+            echo "ERROR: Failed to load map\n";
+            stop();
+        }
+        //  Cache map dimensions.
+        static::$_map_height = count(static::$_map);
+        static::$_map_width  = max(array_map('count', static::$_map));
         //  Read the current position.
         $player_name = config::PLAYER_NAME;
         static::$_current = [
@@ -53,6 +63,33 @@ class Map
             stop();
         }
         static::$_last_move = trim(file_get_contents(config::CLIENT_BASE_DIR . '/act'));
+        //  Load tile decay data, if available.
+        if ( @file_exists("$game_path/decay") && is_resource($decay_file = @fopen("$game_path/decay", 'r')) ) {
+            while ( ! empty($line = trim(fgets($decay_file))) ) {
+                static::$_decay[] = array_map('intval', array_map('trim', explode(',', $line)));
+            }
+            fclose($decay_file);
+            //  Guarantee that the dimensions of the decay array exactly matches
+            //  the dimensions of the map.
+            if ( array_map('count', static::$_map) !== array_map('count', static::$_decay) ) {
+                echo "Decay dimensions don't match map dimensions; setting default decay values.\n";
+                static::$_decay = array_map(function($row){
+                    return array_fill(0, count($row), 1);
+                }, static::$_map);
+            }
+            //  Find the maximum decay value on the map -- used to calculate the
+            //  age of individual tiles as a percentage.
+            $max_decay = max(array_map('max', $static::$_decay));
+            //  Do one last sweep through the decay values to convert them to
+            //  percentages, so this doesn't need to get recalculated.
+            //  See notes in get_decay_pct().
+            static::$_decay = array_map(function($row) use ($max_decay){
+                return array_map(function($decay_value) use ($max_decay){
+                    return 1 - ($decay_value / $max_decay);
+                });
+            }, static::$_decay);
+            static::$_max_decay = $max_decay;
+        }
     }
 
 
@@ -63,7 +100,7 @@ class Map
      */
     public static function size ()
     {
-        return ['y' => count(static::$_map), 'x' => count(static::$_map[0])];
+        return ['x' => static::$_map_width, 'y' => static::$_map_height];
     }
 
 
@@ -78,7 +115,7 @@ class Map
      */
     public static function get ($x, $y = null)
     {
-        if ( is_array($x) ) {
+        if ( is_array($x) && is_null($y) ) {
             $y = $x[1];
             $x = $x[0];
         }
@@ -97,6 +134,42 @@ class Map
     public static function get_all ()
     {
         return static::$_map;
+    }
+
+
+    /**
+     * Return the decay "lifetime" of a tile as a percentage. The game iterates
+     * decay values downward but that makes things a bit logically confusing,
+     * so this function converts the values to a percentage-of-lifespan.
+     *
+     * New tiles are returned as ~0 and old tiles approach .99 ("more decayed").
+     *
+     * @param   int         $x
+     * @param   int         $y
+     *
+     * @return  double
+     */
+    public static function get_decay_pct ($x, $y = null)
+    {
+        if ( is_array($x) && is_null($y) ) {
+            $y = $x[1];
+            $x = $x[0];
+        }
+        if ( is_null($x) || is_null($y) || $y < 0 || $y >= count(static::$_decay) || $x < 0 || $x >= count(static::$_decay[$y]) ) {
+            return 1;
+        }
+        return static::$_decay[$y][$x];
+    }
+
+
+    /**
+     * Return all decay percentage values.
+     *
+     * @return  array
+     */
+    public static function get_all_decay_pct ()
+    {
+        return static::$_decay;
     }
 
 
@@ -247,19 +320,24 @@ class Strategy
         if ( is_null($functions) ) {
             $functions = static::$_value_functions;
         }
-        $values = [];
-        $map = Map::get_all();
-        foreach ($map as $row_y => $map_row) {
-            $values[$row_y] = array_map(function($location) use($functions){
+        //  The Map loader has guaranteed that the decay value array exactly
+        //  matches the dimensions of the map, so...
+        return array_map(function($map_row, $decay_row) use ($functions){
+            return array_map(function($location, $decay_pct) use ($functions){
                 foreach ($functions as $regex => $score) {
                     if ( preg_match("/$regex/", $location) === 1 ) {
-                        return $score;
+                        //  This little bit of math makes it so that younger
+                        //  enemy tiles are more valuable than older ones and
+                        //  older own tiles are less of an obstacle. This
+                        //  slightly changes the balance of tile ages in the
+                        //  game so that opponents have more old tiles and the
+                        //  bot's team has slightly younger tiles overall.
+                        return $score * (1 - $decay_pct);
                     }
                 }
                 return 0;
-            }, $map_row);
-        }
-        return $values;
+            }, $map_row, $decay_row);
+        }, Map::get_all(), Map::get_all_decay_pct());
     }
 
 
