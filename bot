@@ -403,6 +403,7 @@ class Bot
 
     private $_data    = [];
     private $_history = [];
+    private $_status  = '';
 
     /**
      * Return a new Bot object from a key-value array of data.
@@ -451,6 +452,30 @@ class Bot
             }
         }, $moves);
         return $moves;
+    }
+
+
+    /**
+     * Return the target bot's current status according to its recent
+     * move history. Returns either 'active', 'inactive', or 'disabled'.
+     * 'disabled' bots haven't moved in the last 5 turns but have moved
+     * in the last 20; 'inactive' bots haven't moved in the last 20 turns.
+     */
+    public function status ()
+    {
+        if ( empty($this->_status) ) {
+            $recent = $this->get_recent_moves(20);
+            if ( count(array_filter($recent)) == 0 ) {
+                $this->_status = 'inactive';
+            }
+            else if ( count(array_filter(array_slice($recent, 0, 5))) == 0 ) {
+                $this->_status = 'disabled';
+            }
+            else {
+                $this->_status = 'active';
+            }
+        }
+        return $this->_status;
     }
 }
 
@@ -795,8 +820,15 @@ class Strategy
         $bots = Map::get_bots();
         foreach ($bots as $location => $bot) {
             if ( $bot->color != $my_color && Map::distance($bot->x, $bot->y, Map::current('x'), Map::current('y')) < 10 ) {
-                echo "Nearby opponent: " . $bot->name . "\n";
-                print_r($bot->get_recent_moves(5));
+                if ( $bot->status() == 'inactive' ) {
+                    //  The "hazard" value for this bot's coordinates can be reduced,
+                    //  since it isn't moving.
+                    static::$_value_matrix[$bot->y][$bot->x] /= 2;
+                }
+                else {
+                    echo "Nearby active opponent: " . $bot->name . "\n";
+                    print_r($bot->get_recent_moves(5));
+                }
             }
         }
         //  If more than 20% of the tiles on the map are unclaimed, then select
