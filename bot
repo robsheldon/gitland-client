@@ -772,6 +772,29 @@ class Strategy
 
 
     /**
+     * The "punish" strategy. Some opponents have recently adopted a tactic of
+     * following other opponents, effectively erasing their moves, until they
+     * encounter some obstacle. The punishment strategy is intended to take
+     * advantage of this and counter it brutally. It generates a new scoring
+     * matrix that gives the tailing bot's team color a much higher score and
+     * incentivizes this bot to seek out other bots of that color, causing
+     * collisions and reducing their ability to score new tiles.
+     *
+     * This strategy is only really effective when this bot is being followed
+     * by another bot.
+     *
+     * @param   array       $available_moves
+     * @param   Bot         $target
+     *
+     * @return  array
+     */
+    public static function punish ($available_moves, $target)
+    {
+        return static::aggressive($available_moves);
+    }
+    
+
+    /**
      * Return a direction and a commit message depending on the current game
      * situation.
      *
@@ -835,7 +858,7 @@ class Strategy
                 echo "Nearby active opponent: " . $bot->name . "\n";
                 if ( count(array_intersect($my_bot->get_recent_moves(20), $bot->get_recent_moves(20))) > 5 ) {
                     //  If 5 of our last 20 moves match:
-                    echo "Moves match\n";
+                    return static::punish($available_moves, $bot);
                 }
             }
         }
