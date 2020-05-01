@@ -21,6 +21,7 @@ class Map
     private static $_map_width  = 0;
     private static $_decay      = [];
     private static $_max_decay  = 1;
+    private static $_bots       = [];
     private static $_current    = [
         'x'     => 0,
         'y'     => 0,
@@ -51,16 +52,56 @@ class Map
         //  Cache map dimensions.
         static::$_map_height = count(static::$_map);
         static::$_map_width  = max(array_map('count', static::$_map));
-        //  Read the current position.
+        //  Read all player data. This is expensive but most of the strategies
+        //  will require the information anyway; might as well load it all at
+        //  once and get a little i/o cache advantage.
+        $players = [];
+        foreach (glob("$game_path/players/?*/?*") as $file_path) {
+            $data = trim(file_get_contents($file_path));
+            list($player, $key) = explode('/', str_replace("$game_path/players/", '', $file_path));
+            if ( ! array_key_exists($player, $players) ) {
+                $players[$player] = [];
+            }
+            switch ($key) {
+                case 'x':
+                case 'y':
+                    if ( strlen($data) == 0 || ! is_numeric($data) ) {
+                        echo "Invalid position for $player\n";
+                        $players[$player][$key] = 0;
+                    }
+                    else {
+                        $players[$player][$key] = intval($data);
+                    }
+                    break;
+                default:
+                    $players[$player][$key] = $data;
+                    break;
+            }
+        }
+        //  Ensure the current player is in the game.
         $player_name = config::PLAYER_NAME;
-        static::$_current = [
-            'x' => trim(file_get_contents("$game_path/players/$player_name/x")),
-            'y' => trim(file_get_contents("$game_path/players/$player_name/y")),
-            'color' => substr(trim(file_get_contents("$game_path/players/$player_name/team")), 1, 1),
-        ];
-        if ( strlen(static::$_current['x']) == 0 || strlen(static::$_current['y']) == 0 ) {
-            echo "ERROR: Invalid position!\n";
+        if ( ! array_key_exists($player_name, $players) ) {
+            echo "ERROR: Could not find player data directory for $player_name\n";
             stop();
+        }
+        //  Save the current player's position and info.
+        static::$_current = [
+            'x' => $players[$player_name]['x'],
+            'y' => $players[$player_name]['y'],
+            'color' => substr($players[$player_name]['team'], 1, 1),
+        ];
+        //  Build the bots data structure using their current positions as
+        //  unique keys.
+        foreach ($players as $bot_name => $bot_info) {
+            if ( ! array_key_exists('x', $bot_info) || ! array_key_exists('y', $bot_info) || ! array_key_exists('team', $bot_info) ) {
+                echo "ERROR: Can't store data for $bot_name because it's missing required values; skipping.\n";
+                continue;
+            }
+            static::$_bots[$bot_info['x'] . '/' . $bot_info['y']] = array_merge([
+                'name'  => $bot_name,
+                'color' => substr($bot_info['team'], 1, 1),
+                'position'  => ['x' => $bot_info['x'], 'y' => $bot_info['y']],
+            ], $bot_info);
         }
         static::$_last_move = trim(file_get_contents(config::CLIENT_BASE_DIR . '/act'));
         //  Load tile decay data, if available.
