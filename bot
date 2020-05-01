@@ -201,7 +201,13 @@ class Map
 class Strategy
 {
 
-    static private $_weight = 16;
+    static private $_weight          = 16;
+    static private $_value_functions = [];
+
+
+    private static function _generate_value_matrix ($functions = null)
+    {
+    }
 
 
     /**
@@ -223,14 +229,16 @@ class Strategy
         if ( is_null($location) ) {
             return 0;
         }
-        if ( substr($location, 0, 1) == 'c' ) {
-            return config::SCORE_OTHER_BOTS * $weight;
-        }
-        if ( substr($location, 1, 1) != Map::current('color') ) {
-            return config::SCORE_OTHER_COLOR * $weight;
-        }
-        else {
-            return config::SCORE_OWN_COLOR * $weight;
+        $my_color = Map::current('color');
+        $functions = [
+            '^c.$' => config::SCORE_OTHER_BOTS,
+            "^.$my_color\$" => config::SCORE_OWN_COLOR,
+            '^.*$' => config::SCORE_OTHER_COLOR,
+        ];
+        foreach ($functions as $regex => $score) {
+            if ( preg_match("/$regex/", $location) === 1 ) {
+                return $score * $weight;
+            }
         }
         return 0;
     }
