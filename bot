@@ -537,7 +537,7 @@ class Strategy
         }
         //  If the bot is surrounded by its own color and all moves have negative
         //  values, try escaping.
-        if ( count(preg_grep("/^.$my_color\$", $available_moves)) == count($available_moves) ) {
+        if ( count(preg_grep("/^.$my_color\$/", $available_moves)) == count($available_moves) ) {
             $positive_scores = array_filter(static::evaluate_moves($available_moves), function($score){
                 return $score > 0;
             });
