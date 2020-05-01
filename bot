@@ -248,7 +248,7 @@ class Map
      */
     public function get_bots ()
     {
-        return $this->_bots;
+        return static::$_bots;
     }
 
 
