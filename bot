@@ -514,7 +514,7 @@ class Strategy
         }
         //  The Map loader has guaranteed that the decay value array exactly
         //  matches the dimensions of the map, so...
-        return array_map(function($map_row, $decay_row) use ($functions){
+        $matrix = array_map(function($map_row, $decay_row) use ($functions){
             return array_map(function($location, $decay_pct) use ($functions){
                 foreach ($functions as $regex => $score) {
                     if ( preg_match("/$regex/", $location) === 1 ) {
@@ -530,6 +530,17 @@ class Strategy
                 return 0;
             }, $map_row, $decay_row);
         }, Map::get_all(), Map::get_all_decay_pct());
+        //  Run through all the bots in the game and halve the negative scores
+        //  of any bots that aren't moving, since they're less of a hazard.
+        $bots = Map::get_bots();
+        foreach ($bots as $location => $bot) {
+            if ( $bot->status() == 'inactive' ) {
+                //  The "hazard" value for this bot's coordinates can be reduced,
+                //  since it isn't moving.
+                $matrix[$bot->y][$bot->x] /= 2;
+            }
+        }
+        return $matrix;
     }
 
 
@@ -819,16 +830,9 @@ class Strategy
         //  consider their behavior.
         $bots = Map::get_bots();
         foreach ($bots as $location => $bot) {
-            if ( $bot->color != $my_color && Map::distance($bot->x, $bot->y, Map::current('x'), Map::current('y')) < 10 ) {
-                if ( $bot->status() == 'inactive' ) {
-                    //  The "hazard" value for this bot's coordinates can be reduced,
-                    //  since it isn't moving.
-                    static::$_value_matrix[$bot->y][$bot->x] /= 2;
-                }
-                else {
-                    echo "Nearby active opponent: " . $bot->name . "\n";
-                    print_r($bot->get_recent_moves(5));
-                }
+            if ( $bot->color != $my_color && Map::distance($bot->x, $bot->y, Map::current('x'), Map::current('y')) < 10 && $bot->status() != 'inactive' ) {
+                echo "Nearby active opponent: " . $bot->name . "\n";
+                print_r($bot->get_recent_moves(5));
             }
         }
         //  If more than 20% of the tiles on the map are unclaimed, then select
