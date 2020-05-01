@@ -90,6 +90,17 @@ class Map
 
 
     /**
+     * Return the entire internal map array.
+     *
+     * @return  array
+     */
+    public static function get_all ()
+    {
+        return static::$_map;
+    }
+
+
+    /**
      * Return a count of the number of $search occurrences in the map.
      *
      * @param   string      $search
@@ -203,10 +214,36 @@ class Strategy
 
     static private $_weight          = 16;
     static private $_value_functions = [];
+    static private $_value_matrix    = [];
 
 
+    /**
+     * Generates a map of values for each element on the board. If no scoring
+     * functions are supplied, then the default ones are used (initialized
+     * by find_move()).
+     *
+     * @param   array       $functions
+     *
+     * @return  array
+     */
     private static function _generate_value_matrix ($functions = null)
     {
+        if ( is_null($functions) ) {
+            $functions = static::$_value_functions;
+        }
+        $values = [];
+        $map = Map::get_all();
+        foreach ($map as $row_y => $map_row) {
+            $values[$row_y] = array_map(function($element) use($functions){
+                foreach ($functions as $regex => $score) {
+                    if ( preg_match("/$regex/", $location) === 1 ) {
+                        return $score;
+                    }
+                    return 0;
+                }
+            }, $map_row);
+        }
+        return $values;
     }
 
 
@@ -225,16 +262,10 @@ class Strategy
      */
     public static function score ($x, $y, $weight = 1)
     {
-        $location = Map::get($x, $y);
-        if ( is_null($location) ) {
+        if ( is_null(Map::get($x, $y)) ) {
             return 0;
         }
-        foreach (static::$_value_functions as $regex => $score) {
-            if ( preg_match("/$regex/", $location) === 1 ) {
-                return $score * $weight;
-            }
-        }
-        return 0;
+        return static::$_value_matrix[$y][$x] * $weight;
     }
 
 
@@ -396,6 +427,8 @@ class Strategy
             "^.$my_color\$" => config::SCORE_OWN_COLOR,
             '^.*$' => config::SCORE_OTHER_COLOR,
         ];
+        //  Initialize a default value matrix.
+        static::$_value_matrix = static::_generate_value_matrix();
         //  Load the default available commands.
         $commands = config::VALID_MOVES;
         //  Retrieve coordinates for available moves from the current map.
