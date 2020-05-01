@@ -349,6 +349,7 @@ class Strategy
                 $scores[$direction] += ($score + static::area_score($direction, $x, $y, $weight, $spread));
             }
         }
+        var_dump($scores);
         arsort($scores);
         return $scores;
     }
