@@ -234,7 +234,7 @@ class Strategy
         $values = [];
         $map = Map::get_all();
         foreach ($map as $row_y => $map_row) {
-            $values[$row_y] = array_map(function($element) use($functions){
+            $values[$row_y] = array_map(function($location) use($functions){
                 foreach ($functions as $regex => $score) {
                     if ( preg_match("/$regex/", $location) === 1 ) {
                         return $score;
