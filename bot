@@ -86,7 +86,7 @@ class Map
             static::$_decay = array_map(function($row) use ($max_decay){
                 return array_map(function($decay_value) use ($max_decay){
                     return 1 - ($decay_value / $max_decay);
-                });
+                }, $row);
             }, static::$_decay);
             static::$_max_decay = $max_decay;
         }
