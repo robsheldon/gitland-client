@@ -466,7 +466,6 @@ class Strategy
     public static function cruise ($available_moves)
     {
         $scores = static::evaluate_moves($available_moves);
-        var_dump($scores);
         if ( array_key_exists(Map::last_move(), $scores) && $scores[Map::last_move()] > 0 ) {
             return ['move' => Map::last_move(), 'logmsg' => "cruise; " . Map::last_move() . "; xy:" . Map::current('x') . "," . Map::current('y')];
         }
