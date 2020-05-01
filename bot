@@ -530,14 +530,15 @@ class Strategy
         //  For now, let's continue this helpful debugging output. TODO.
         print_r($available_moves);
         //  Select a strategy.
+        //  If there is only one move (or no moves), fall back to the "stuck"
+        //  strategy. In the future this strategy might do something cool.
         if ( count($available_moves) < 2 ) {
-            //  Fall back to the "stuck" strategy; escape in any available direction.
-            //  In the future, the bot may try to teleport from this location.
             return static::stuck($available_moves);
         }
         //  If the bot is surrounded by its own color and all moves have negative
         //  values, try escaping.
         if ( count(preg_grep("/^.$my_color\$/", $available_moves)) == count($available_moves) ) {
+            echo "Yipes! Surrounded by own color...\n";
             $positive_scores = array_filter(static::evaluate_moves($available_moves), function($score){
                 return $score > 0;
             });
@@ -545,12 +546,12 @@ class Strategy
                 return static::escape($available_moves);
             }
         }
+        //  If more than 20% of the tiles on the map are unclaimed, then select
+        //  a friendlier, less aggressive movement pattern.
         if ( Map::count('ux') > array_product(Map::size()) * .2 ) {
-            //  If more than 20% of the tiles on the map are unclaimed, then
-            //  select a friendlier, less aggressive movement pattern.
             return static::cruise($available_moves);
         }
-        //  Default strategy: best available move.
+        //  Default strategy: best local move.
         return static::aggressive($available_moves);
     }
 
