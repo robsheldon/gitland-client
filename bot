@@ -246,9 +246,30 @@ class Map
      *
      * @return  array
      */
-    public function get_bots ()
+    public static function get_bots ()
     {
         return static::$_bots;
+    }
+
+
+    /**
+     * Return the history for a specified bot.
+     *
+     * @return  array
+     */
+    public static function get_bot_activity ($bot_name)
+    {
+        $entries = [];
+        foreach (static::$_log as $timestamp => $lines) {
+            $matches = preg_grep("/^$bot_name /", $lines);
+            if ( count($matches) > 0 ) {
+                $entries[] = $matches[0];
+            }
+            else {
+                $entries[] = '';
+            }
+        }
+        return $entries;
     }
 
 
@@ -408,6 +429,27 @@ class Bot
         }
         //  TODO: It's time for proper exception handling.
         return null;
+    }
+
+    /**
+     * Return recent move-related history for this bot.
+     *
+     * @return  array
+     */
+    public function get_recent_moves ($n = null)
+    {
+        if ( empty($this->_history) ) {
+            $this->_history = Map::get_bot_activity($this->_data['name']);
+        }
+        $moves = is_null($n) ? $this->_history : array_slice($this->_history, 0, $n);
+        $moves = array_map(function($line){
+            if ( preg_match('/moved to (/[0-9]+\/[0-9]+)/', $line, $move) === 1 ) {
+                return $move[0];
+            }
+            else {
+                return null;
+            }
+        }, $moves);
     }
 }
 
@@ -753,6 +795,7 @@ class Strategy
         foreach ($bots as $location => $bot) {
             if ( $bot->color != $my_color && Map::distance($bot->x, $bot->y, Map::current('x'), Map::current('y')) < 10 ) {
                 echo "Nearby opponent: " . $bot->name . "\n";
+                print_r($bot->get_recent_moves(5));
             }
         }
         //  If more than 20% of the tiles on the map are unclaimed, then select
