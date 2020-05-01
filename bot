@@ -829,7 +829,7 @@ class Strategy
         //  Now that urgent situations are resolved, look at nearby bots and
         //  consider their behavior.
         $bots = Map::get_bots();
-        $my_bot = $bots[Map::current('x') '/' . Map::current('y')];
+        $my_bot = $bots[Map::current('x') . '/' . Map::current('y')];
         foreach ($bots as $location => $bot) {
             if ( $bot->color != $my_color && Map::distance($bot->x, $bot->y, Map::current('x'), Map::current('y')) < 10 && $bot->status() != 'inactive' ) {
                 echo "Nearby active opponent: " . $bot->name . "\n";
