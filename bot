@@ -242,6 +242,17 @@ class Map
 
 
     /**
+     * Return the bots in the map.
+     *
+     * @return  array
+     */
+    public function get_bots ()
+    {
+        return $this->_bots;
+    }
+
+
+    /**
      * Return a count of the number of $search occurrences in the map.
      *
      * @param   string      $search
@@ -734,6 +745,14 @@ class Strategy
             });
             if ( count($positive_scores) == 0 ) {
                 return static::escape($available_moves);
+            }
+        }
+        //  Now that urgent situations are resolved, look at nearby bots and
+        //  consider their behavior.
+        $bots = Map::get_bots();
+        foreach ($bots as $location => $bot) {
+            if ( $bot->color != $my_color && Map::distance($bot->x, $bot->y, Map::current('x'), Map::current('y')) < 10 ) {
+                echo "Nearby opponent: " . $bot->name . "\n";
             }
         }
         //  If more than 20% of the tiles on the map are unclaimed, then select
