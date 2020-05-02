@@ -728,7 +728,7 @@ class Strategy
         foreach ($available_moves as $direction => $value) {
             list($move_x, $move_y) = Map::translate($direction, $current_x, $current_y);
             if ( Map::distance($move_x, $move_y, $destination['x'], $destination['y']) < $current_distance ) {
-                return ['move' => $direction, 'logmsg' => "escape; $direction; xy:$current_x,$currenty"];
+                return ['move' => $direction, 'logmsg' => "escape; $direction; xy:$current_x,$current_y"];
             }
         }
         //  Okay, can't get there from here right now.
