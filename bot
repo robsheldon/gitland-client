@@ -573,6 +573,8 @@ class Strategy
                 }
             }
         }
+        echo "nearest_exit():\n";
+        var_dump($candidate_xy);
         return $candidate_xy;
     }
 
