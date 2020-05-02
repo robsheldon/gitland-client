@@ -866,7 +866,7 @@ class Strategy
         foreach ($bots as $location => $bot) {
             if ( $bot->color != $my_color && Map::distance($bot->x, $bot->y, Map::current('x'), Map::current('y')) < 10 && $bot->status() != 'inactive' ) {
                 echo "Nearby active opponent: " . $bot->name . "\n";
-                if ( count(array_intersect($my_bot->get_recent_moves(20), $bot->get_recent_moves(20))) > 5 ) {
+                if ( count(array_intersect(array_filter($my_bot->get_recent_moves(20)), array_filter($bot->get_recent_moves(20)))) > 5 ) {
                     //  If 5 of our last 20 moves match:
                     return static::punish($available_moves, $bot);
                 }
