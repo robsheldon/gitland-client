@@ -555,7 +555,7 @@ class Strategy
     {
         $current_x = Map::current('x');
         $current_y = Map::current('y');
-        $candidate_distance = $map_length * $map_height;
+        $candidate_distance = array_product(Map::size());
         $candidate_xy = [];
         foreach (static::$_value_matrix as $y => $row) {
             foreach ($row as $x => $value) {
