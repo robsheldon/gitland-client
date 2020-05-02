@@ -790,7 +790,17 @@ class Strategy
      */
     public static function punish ($available_moves, $target)
     {
-        return static::aggressive($available_moves);
+        $target_team = $target->color;
+        $scoring_functions = array_merge([
+            '^u' . $target_color . '$' => abs(-1 * config::SCORE_OTHER_BOTS),
+            '^c' . $target_color . '$' => abs(-2 * config::SCORE_OWN_COLOR),
+        ], static::$_value_functions);
+        static::$_value_matrix = static::_generate_value_matrix();
+        //  Hand off to the locally-aggressive strategy to find the move.
+        $next_move = static::aggressive($available_moves);
+        //  Update the commit message.
+        $next_move['logmsg'] = str_replace('aggressive;', 'punish(' . $target->name . ');', $next_move['logmsg']);
+        return $next_move;
     }
     
 
