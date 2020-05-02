@@ -1,11 +1,17 @@
 # My little [gitland](https://github.com/programical/gitland) bot
 
-Gitland was [posted to HN](https://news.ycombinator.com/item?id=22990659) on April 26 and I needed a fun little distraction. I banged out a quick and very sloppy bot and it has done very well, heavily tilting the board in favor of my team's color. I'm adding the bot's code and some commentary to the repository before I get tempted to spend any time on it.
+Gitland was [posted to HN](https://news.ycombinator.com/item?id=22990659) on April 26 and I needed a fun little distraction. I banged out a quick and very sloppy bot and it did pretty well, heavily tilting the board in favor of my team's color.
+
+I had only spent a couple of hours on it, so I posted the bot's code as-was at a2da5c1e44d2b41752e0fa6a0c03d8d7d5e71f20 and decided to retire it the next morning.
+
+And then a couple of opponents suddenly changed tactics and started following other bots, including mine, effectively erasing their moves from the board. Well, I couldn't let that stand. I had guessed early on that that could be an effective strategy, but nobody was doing it so I didn't bother trying to counter it. Now that someone was, the game got a lot more interesting.
+
+I cleaned up and restructured the bot's code and gave it a lot more awareness of the game state and recent activity and then I gave it multiple strategies to use depending on the game state, including one that would punish follower bots.
 
 
 ## State of the code
 
-It's written in PHP because that's the language I spend the most time in these days. It doesn't use any of Github's APIs. The code is not *good* PHP and doesn't follow many of the modern standards. I've only got a couple hours' time in it at most -- about one hour on the initial versions and another hour fixing edge cases.
+This is in PHP because that's the language I spend the most time in these days. It doesn't use any of Github's APIs. The code is decent but doesn't follow all of PHP's modern standards. It's a single file with three classes and no dependencies.
 
 
 ## Getting started
@@ -16,186 +22,87 @@ You'll need the gitland repo and your gitland-client repo, and a config file tha
 
 class config
 {
-    const GAME_BASE_DIR   = '/path/to/gitland';
-    const CLIENT_BASE_DIR = '/path/to/gitland-client';
-    const PLAYER_NAME     = 'yourusername';
+    const GAME_BASE_DIR       = '/path/to/gitland';
+    const CLIENT_BASE_DIR     = '/path/to/gitland-client';
+    const PLAYER_NAME         = 'yourusername';
+    const VALID_MOVES         = ['up', 'down', 'left', 'right', 'idle'];
+    const SCORE_OWN_COLOR     = -1;
+    const SCORE_OTHER_BOTS    = -4;
+    const SCORE_OTHER_COLOR   = 2;
+    const SCORE_WEIGHT_FACTOR = 12;
 }
 ```
 
-The config file should be stored in your gitland-client directory.
+The config file should be stored in your gitland-client directory. Choose your own values for the `SCORE_*` values. You'll generally want low values for `OWN_COLOR` and `OTHER_BOTS` and a positive value for `OTHER_COLOR`, and a `WEIGHT_FACTOR` higher than 10. Finding optimal values here is pretty much a trial-and-error thing at the moment.
 
 The bot will figure out your team color, current position, and the game state, and then will write its suggested move to the `act` file and try to commit and push the change. Set the bot to run every minute from a crontab and you're done.
 
 
 ## How moves are evaluated
 
-There are lots of really really smart algorithms for choosing moves in a game like this. I didn't use any of those. My goal was to see how *quickly* I could throw something together that performed sort of okay. The less time I spent on it, the better.
+The bot looks across the map in each possible direction from its current position and calculates a total "score" for that direction. It factors in the values in the config file and the current "lifespan" (decay) of each of the tiles. As the calculation moves farther away from the bot's current position, it gradually spreads out, forming a sort of "beam". This helps the bot have a sense of what the board looks like far away from its current position, so it can consistently move towards higher-scoring areas of the board even if the local moves aren't great. Scores are multiplied by the weighting factor, and each additional step away from the bot's current position cuts the weighting factor in half. This helps the bot avoid nearby obstacles, like other bots or its own color, and it handles this very well.
 
-The bot uses a rudimentary, hacky scoring algorithm to evaluate the board in each of its four possible directions. The scoring algorithm adds positive points for unoccupied enemy colors and negative points for occupied tiles or tiles that already belong to the bot's team. It adds in a weight multiplier for the nearest tiles and cuts the weight multiplier in half as it evaluates each step farther away. This scoring is done in a narrow "beam" in each direction, so the bot can get a sense of what the board looks like far away from its current position.
+There are a few different strategies that the bot uses depending on the board's situation:
 
-It looks kind of like this:
+### Escape and Stuck
 
-```
-f    ccc    f
-fed  bbb  def
-fedcb a bcdef
-fedcba#abcdef
-fedcb a bcdef
-fed  bbb  def
-f    ccc    f
-```
+These two strategies are employed if the bot has limited moves available or finds itself in the middle of a lot of its own color. It first tries to escape, which consists of seeking out the nearest available positive-scoring tile and moving towards it. If it can't escape, then it will switch to "stuck", writing the `idle` command to its `act` file and waiting for the next turn.
 
-The "a" positions are really important, the "b" positions are pretty important, "c" positions are less important, and so on.
+### Cruise
 
-The scores are added up for each direction and the bot moves in the highest-scoring direction.
+If 20% or more of the board is empty (not occupied by any color), then it switches to a cruise strategy. This is a mostly friendly strategy that sends the bot in a positive-scoring direction and keeps it moving in that direction as long as it's still positive. Once the score for that direction becomes negative -- becaause the bot is about to bump into another bot or a lot of its own color -- it will turn. This leaves long, straight lines on the board and plenty of other opportunities for other bots to score points.
 
-This approach works well whether the map is crowded, sparse, mostly full of the bot's color, or mostly full of enemy colors.
+### Aggressive
+
+If the board gets more competitive then it switches to a more aggressive strategy and plays the most optimal move each turn. This can carve the board up quite badly and also causes the average age of opponents' tiles to increase.
+
+### Punish
+
+This strategy is my answer to the follower bots. It detects other bots repeating too many of its moves and turns the tables on them, prioritizing their team's color and trying to lead the follower bot into crashing into teammates. It does this by re-scoring the board area and giving positive values to bots on the team that's being punished and very high values to their color tiles. As the bot heads straight into clusters of opponent bots the likelihood that they collide with each other (costing moves and points) goes up. This isn't necessarily the best overall strategy for the bot's team, but it can really make a mess of any team that uses follower bots.
 
 
 ## Walkthrough
 
 Really more of a stumble through the code. Anyway:
 
+### `Map` class
+
+The Map static class at the top of the file contains most of the information about the game state. `Map::load()` does all the file processing in the beginning since most strategies will need all of this data at some point. All player files are loaded so that the Map class can provide information about where other bots are, and a git command is used to load and process recent game activity.
+
+### `Bot` class
+
+The Map class instantiates a list of Bot objects. Each one encapsulates another player's name, team, position, and historical activity. This is a pretty simple class that just provides a clean way to interact with bot-related data.
+
+### `Strategy` class
+
+The Strategy class handles most of the magic decision-making. The application code calls `Strategy::find_move()`, the function responsible for choosing a strategy and returning the chosen move (and commit message).
+
 ```php
-$moves['left']  = Map::get($current['x'] - 1, $current['y']);
-$moves['right'] = Map::get($current['x'] + 1, $current['y']);
-$moves['up']    = Map::get($current['x'], $current['y'] - 1);
-$moves['down']  = Map::get($current['x'], $current['y'] + 1);
+//  Initialize a default value matrix.
+static::$_value_matrix = static::_generate_value_matrix();
 ```
-After some basic initialization, the bot starts off with figuring out which moves are available from its current position.
 
-
-```php
-$moves = array_filter($moves, function($move){
-    if ( is_null($move) || substr($move, 0, 1) == 'c' ) {
-        return false;
-    }
-    return true;
-});
-```
-Invalid moves are removed (moves that go off the board or collide with another bot). If only one move is available, it does that, otherwise:
-
+`find_move()` calls the private function `_generate_value_matrix()`, which calculates the scores from the config file and the decay values for each location in the map. This creates a "base layer" of values for the entire map which can then be combined with the lookahead gradient from the bot's position.
 
 ```php
-function evaluate_moves ()
+public static function score ($x, $y, $weight = 1)
 {
-    global $moves, $current, $last_move;
-    $scores = [];
-    foreach ($moves as $direction => $value) {
-        $scores[$direction] = 0;
-        $x = $current['x'];
-        $y = $current['y'];
-        $weight = 16;
-        $score = 0;
-        $spread = 0;
-        $lookahead_iteration = 0;
-        while ( true ) {
-            $lookahead_iteration++;
-            //  Expand the lookahead beam a bit.
-            if ( $lookahead_iteration % 2 != 0 ) {
-                $spread++;
-            }
-            //  Adjust weighting for distance from current position.
-            $weight /= 2;
-            //  Transform coordinates.
-            list($x, $y) = translate($direction, $x, $y);
-            //  Calculate scores in this direction.
-            $score = score($x, $y, $weight);
-            if ( $score === 0 ) {
-                //  score() returns exactly 0 if the coordinates are not valid.
-                break;
-            }
-            //  If this direction is the opposite of the last direction, brutally
-            //  penalize it to prevent oscillations.
-            if ( $direction == Map::opposite($last_move) ) {
-                $score -= $weight;
-            }
-            //  Calculate the final score for this iteration of this direction.
-            $scores[$direction] += ($score + area_score($direction, $x, $y, $weight, $spread));
-        }
-    }
-    arsort($scores);
-    return $scores;
-}
-```
-This function does the lookahead scoring for each possible move. The beam's "center" gets a higher weight than the sides of the beam; this allows the bot to find its way through narrow tunnels that open up to more scoring opportunities.
-
-The bot got stuck once when it managed to find a place on the board where "up" was slightly better than down, until it moved one square up, and then "down" looked better, so it moved one square down... ugh. So my last quick fix in this code was a few lines to reduce jitter.
-
-
-```php
-function area_score ($direction, $x, $y, $weight, $spread)
-{
-    $score = 0;
-    $n = -1 * $spread;
-    switch ($direction) {
-        case 'left':
-        case 'right':
-            //  If going left or right, then spread vertically.
-            while ( $n <= $spread ) {
-                $score += score($x, $y + $n, $weight / 2);
-                $n++;
-            }
-            break;
-        case 'up':
-        case 'down':
-            //  If going up or down, then spread horizontally.
-            while ( $n <= $spread ) {
-                $score += score($x + $n, $y, $weight / 2);
-                $n++;
-            }
-            break;
-    }
-    return $score;
-}
-```
-This is the function that handles scoring for the expanding "beam" at each iteration.
-
-
-```php
-function score ($x, $y, $weight = 1)
-{
-    global $current;
-    $location = Map::get($x, $y);
-    if ( is_null($location) ) {
+    if ( is_null(Map::get($x, $y)) ) {
         return 0;
     }
-    if ( substr($location, 0, 1) == 'c' ) {
-        //  Strongly avoid other players.
-        return -5 * $weight;
-    }
-    if ( substr($location, 1, 1) != $current['color'] ) {
-        //  Try to stomp on other colors.
-        return 1.5 * $weight;
-    }
-    else {
-        //  Avoid red areas.
-        return -2 * $weight;
-    }
-    return 0;
+    return static::$_value_matrix[$y][$x] * $weight;
 }
 ```
-These are all the magic numbers that are used for scoring. -5 points for other bots, 1.5 points for enemy colors, and -2 points for the bot's own color. This is a stupidly simple, fast calculation, and it's good enough to play this game well. The numbers are the result of a few minutes' trial-and-error.
+
+Once the value matrix is calculated, score calculations become fast and easy and can be repeated quickly as the Strategy class works through different options. The `Strategy::area_score()` function does something similar, but just "spreads" the scoring out as it gets farther away from the bot's current position. `Strategy::evaluate_moves()` handles combining the `score()` and `area_score()` results into a single scalar value for each possible direction the bot can move this turn. The `evaluate_moves()` function also includes a fix that prevents bot jitter by penalizing scores in the opposite direction from the bot's last movement. This prevents the bot from oscillating up and down or left and right.
+
+Each of the strategies described above are encapsulated in their own functions: `Strategy::stuck()`, `Strategy::escape()`, `Strategy::cruise()`, `Strategy::aggressive()`, and `Strategy::punish()`. The `Strategy::find_move()` function selects one of these solutions depending on the board situation and the comments in that function pretty well describe the process.
 
 
-```php
-if ( array_key_exists(last_move(), $scores) && $scores[last_move()] > 0 ) {
-    echo last_move() . " is still good enough\n";
-    $direction = last_move();
-}
-```
-I noticed that the bot was sort of chewing up the board -- zig-zagging all over the place, left, up, left, up, left, up and so on -- and while this was good for my bot, it was bad for all the other players. My fellow teammates would not score points any time they intersected one of my tiles, and opposing teams would have to navigate my paths through their areas or spend a lot of moves on their own color. It wasn't very nice.
+## Possible future improvements
 
-So I added this adjustment which would compel the bot to continue in its current direction until it became a bad move. The score evaluation rapidly goes negative as the bot approaches its own area or other bots, so it pivots at just about the right time. This leaves longer lines on the board and more open, square areas for other bots to navigate. If the board becomes very crowded, all directions will become a bit negative, so the bot will return to just choosing the least bad available move each turn.
-
-
-## Possible improvements
-
-* There shouldn't be globals in modern code. This was a nasty quick hack, but I would remove those and restructure it properly.
 * It should follow standard PHP class-based conventions with composer and all that.
 * I would like to optimize the scoring function a bit with some unit testing with atoum or similar. A test suite of different board positions and the expected best move would be great.
-* There are some edge cases the bot doesn't handle well. Sometimes it will box itself in because it doesn't think far enough ahead about what the board may be like in a few turns. Doing a breadth-first search of the next several moves would be great.
-* There isn't a complete model of the board, with usernames for other bots and so on.
 * The bot doesn't anticipate movements from other bots. `git log -p log | grep "^\+.*username"` can be used to pick up other bots' movements from the log. This could be used to make a crude guess about what direction a nearby bot is moving and whether a collision is likely.
 
 ## That's it.
