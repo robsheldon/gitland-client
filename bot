@@ -877,9 +877,10 @@ class Strategy
                 //  ...then try to figure out who's following who, and if the
                 //  other bot is following this bot, then switch to the "punish"
                 //  strategy.
-                if ( count($their_overlap) > 5 && array_sum(array_keys($my_overlap)) < array_sum(array_keys($their_overlap)) ) {
+                if ( count($their_overlap) > 5 && array_sum(array_keys($my_overlap)) > array_sum(array_keys($their_overlap)) ) {
                     //  If this bot's matching movement indices are generally
-                    //  lower than the other bot's, then the other bot can be
+                    //  higher than the other bot's, then that means they've made
+                    //  matching moves more recently, so the other bot can be
                     //  assumed to be following this one.
                     return static::punish($available_moves, $bot);
                 }
